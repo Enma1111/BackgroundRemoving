@@ -1,52 +1,84 @@
 ﻿// See https://aka.ms/new-console-template for more information
 using Emgu.CV;
+using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
 using Emgu.CV.Util;
 using System.Drawing;
 
-string input = "C:/Users/Jan/Desktop/2028834250.jpg";
-string output = "C:/Users/Jan/Desktop/2028834250cropped.jpg";
-RemoveBackgroundándCrop(input, output);
+string inputFolder = "C:/Users/info_894bsva/Desktop/TestBilder/";
+string outputFolder = "C:/Users/info_894bsva/Desktop/TestBilderErgebnis/";
 
-static void RemoveBackgroundándCrop(string inputPath,string OutputPath)
+if (!Directory.Exists(outputFolder))
 {
-    Mat img = CvInvoke.Imread(inputPath, Emgu.CV.CvEnum.ImreadModes.Color);
+    Directory.CreateDirectory(outputFolder);
+}
 
-    Mat gray = new();
-    CvInvoke.CvtColor(img, gray, Emgu.CV.CvEnum.ColorConversion.Bgr2Gray);
+string[] inputPaths = Directory.GetFiles(inputFolder, "*.jpg");
 
-    Mat thresh = new();
+foreach (string input in inputPaths)
+{
+    string fileName = Path.GetFileNameWithoutExtension(input);
+    
+    string outputFileName = fileName + "_cropped.jpg";
+    
+    string outputPath = Path.Combine(outputFolder, outputFileName);
+    
+    RemoveBackgroundAndCrop(input, outputPath);
+}
+
+
+static void RemoveBackgroundAndCrop(string inputPath,string outputPath)
+{
+    //Lesen des Bildes in Farbe
+    Mat img = CvInvoke.Imread(inputPath, ImreadModes.Color);
+
+    //Umwandeln des Bildes in Graustufen
+    Mat gray = new Mat();
+    CvInvoke.CvtColor(img, gray, ColorConversion.Bgr2Gray);
+
+    //Hindergrundrauschen verringern
+    CvInvoke.GaussianBlur(gray, gray, new Size(5, 5), 0);
+
+    
+    Mat thresh = new Mat();
+    //Nicht Adaptive Schwellwertbestimmung
     //CvInvoke.Threshold(gray, thresh, 200, 255, Emgu.CV.CvEnum.ThresholdType.BinaryInv);
-    CvInvoke.AdaptiveThreshold(gray, thresh, 255,
-        Emgu.CV.CvEnum.AdaptiveThresholdType.MeanC,
-        Emgu.CV.CvEnum.ThresholdType.BinaryInv, 15, 10);
 
-    using (VectorOfVectorOfPoint contours = new())
+    //AdaptiveThresholdType Schwellwert bestimmung
+    CvInvoke.AdaptiveThreshold(gray, thresh, 255, AdaptiveThresholdType.MeanC, ThresholdType.BinaryInv, 15, 10);
+
+
+    using (VectorOfVectorOfPoint contours = new VectorOfVectorOfPoint())
     {
-        Mat hierarchy = new();
-        CvInvoke.FindContours(thresh, contours, hierarchy, Emgu.CV.CvEnum.RetrType.External, Emgu.CV.CvEnum.ChainApproxMethod.ChainApproxSimple);
+        //Suche nach Konturen im Binären Bild
+        Mat hierarchy = new Mat();
+        CvInvoke.FindContours(thresh, contours, hierarchy, RetrType.External, ChainApproxMethod.ChainApproxSimple);
 
-        double maxArea = 0;
-        int maxIndex = -1;
-
+        //Berechnen des Bounding Rectangles
+        Rectangle boundingRect = Rectangle.Empty;
         for (int i = 0; i < contours.Size; i++)
         {
-            double area = CvInvoke.ContourArea(contours[i]);
-            if (area > maxArea)
+            Rectangle contourRect = CvInvoke.BoundingRectangle(contours[i]);
+
+            //boundingRect Rectangles verbinden
+            if (boundingRect == Rectangle.Empty)
             {
-                maxArea = area;
-                maxIndex = i;
+                boundingRect = contourRect;
+            }
+            else
+            {
+                boundingRect = Rectangle.Union(boundingRect, contourRect);
             }
         }
 
-        if (maxIndex >= 0)
+        //Prüfung ob  boundingRect nicht leer ist
+        if (!boundingRect.IsEmpty)
         {
-            Rectangle rect = CvInvoke.BoundingRectangle(contours[maxIndex]);
+            //Ausschneiden des Bereichs aus dem original Bild
+            Mat cropped = new Mat(img, boundingRect);
 
-            Mat cropped = new(img, rect);
-
-            CvInvoke.Imwrite(OutputPath, cropped);
-
+            
+            CvInvoke.Imwrite(outputPath, cropped);
         }
     }
 }
